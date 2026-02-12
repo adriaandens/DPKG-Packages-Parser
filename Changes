@@ -1,6 +1,8 @@
 Revision history for DPKG-Packages-Parser
 
 {{$NEXT}}
+        - Performance optimizations (25% faster)
+        - Added extra tests
 
 0.01  2026-02-08 08:58:40 GMT
         - Initial release

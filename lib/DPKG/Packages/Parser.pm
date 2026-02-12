@@ -24,56 +24,48 @@ class DPKG::Packages::Parser {
 	}
 
 	method _parse_from_file(@fields) {
+		my %f = ();
+		my @array_fields = qw(Tag Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
 		if(@fields) {
 			unshift @fields, 'Package' if ! grep { 'Packages' eq $_ } @fields;
+			foreach(@fields) {
+				$f{$_} = 1;
+			}
 		}
 		open(my $f, '<', $file) or die "Cannot read $file\n";
 		my %entry = ();
 		my $last_key = ''; # 'Tag' is multi-line, I don't know why...
 		while(<$f>) {
 			chomp;
-			if(!$_) {
-				# Tags need to be parsed
-				my @array_fields = qw(Tag Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
+			if(!$_) { # Empty line == post processing of entry (we've seen all its lines)
 				foreach(@array_fields) {
 					if(defined($entry{$_})) {
-						my @temp = split ', ', $entry{$_};
-						$entry{$_} = \@temp;
-					}
-				}
-				my @version_fields = qw(Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
-				foreach(@version_fields) {
-					if(defined($entry{$_})) {
-						my @new_entries = ();
-						foreach(@{$entry{$_}}) {
-							if(/ \| /) {
-								my @a = ();
-								foreach(split(/ \| /, $_)) {
-									my $pkg = $self->_parse_package_str($_);
-									push @a, $pkg;
+						#$entry{$_} = [ split(', ', $entry{$_}) ];
+						my @a = split(', ', $entry{$_}); # split the list
+						if($_ eq 'Tag') {
+							$entry{$_} = \@a;
+						} else {
+							my @new_entries = ();
+							foreach(@a) {
+								if(index($_, '|') >= 0) {
+									push @new_entries, [ map { $self->_parse_package_str($_) } split(' \| ', $_) ];
+								} else {
+									push @new_entries, $self->_parse_package_str($_);
 								}
-								push @new_entries, \@a;
-							} else {
-								push @new_entries, $self->_parse_package_str($_);
 							}
+							$entry{$_} = \@new_entries;
 						}
-						$entry{$_} = \@new_entries;
 					}
 				}
 				$entries{$entry{Package}} = clone(\%entry);
 				%entry = ();
 			} else {
-				if(!/^\s+/) {
+				if(index($_, ' ') > 0) {
 					my ($key, $val) = split(': ', $_, 2);
-					if((@fields && grep { $key eq $_ } @fields) || !@fields) {
-						$entry{$last_key = $key} = $val;
-					} else {
-						$last_key = $key;
-					}
+					$entry{$key} = $val if (@fields && $f{$key}) || !@fields;
+					$last_key = $key;
 				} else {
-					if((@fields && grep { $last_key eq $_ } @fields) || !@fields) {
-						$entry{$last_key} .= $_;
-					}
+					$entry{$last_key} .= $_ if (@fields && $f{$last_key}) || !@fields;
 				}
 			}
 		}
@@ -81,28 +73,12 @@ class DPKG::Packages::Parser {
 	}
 
 	method _parse_package_str($s) {
-		$_ = $s;
-		if(/^([\w\-\+\.\:]+) \((\S+) (\S+)\)/) {
-			my ($name, $arch) = $self->_parse_package_name($1);
-			my %e = (name => $name, op => $2, version => $3, arch => $arch);
-			return \%e;
-		} elsif(/^([\w\-\+\.\:]+):any/) {
-			my ($name, $arch) = $self->_parse_package_name($1);
-			my %e = (name => $name, op => undef, version => 'any', arch => $arch);
-			return \%e;
-		} elsif(/^([\w\-\+\.\:]+)$/) {
-			my ($name, $arch) = $self->_parse_package_name($1);
-			my %e = (name => $name, op => undef, version => undef, arch => $arch);
-			return \%e;
-		} else {
-			say "i don't know: $_";
-			my %e = (name => $_, op => undef, version => undef, arch => undef);
-			return \%e;
-		}
-	}
-
-	method _parse_package_name($name) {
-		return split(':', $name);
+		my @x = split(' ', $s);
+		my ($name, $arch) = split(':', $x[0]);
+		my $op = $x[1] ? substr($x[1], 1) : undef;
+		chop($x[2]) if $x[2];
+		my $version = $x[2] ? $x[2] : undef;
+		return {name => $name, op => $op, version => $version, arch => $arch};
 	}
 
 	method get_package($name) {
