@@ -28,44 +28,26 @@ class DPKG::Packages::Parser {
 		my @array_fields = qw(Tag Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
 		if(@fields) {
 			unshift @fields, 'Package' if ! grep { 'Packages' eq $_ } @fields;
-			foreach(@fields) {
-				$f{$_} = 1;
-			}
+			$f{$_} = 1 foreach(@fields);
+			@array_fields = grep { $f{$_} } @array_fields; # Only keep the ones that are requested by the User
 		}
 		open(my $f, '<', $file) or die "Cannot read $file\n";
 		my %entry = ();
-		my $last_key = ''; # 'Tag' is multi-line, I don't know why...
+		my $last_key; # 'Tag' is multi-line, I don't know why this is the only field which does this... but we need to remember th^i
 		while(<$f>) {
 			chomp;
 			if(!$_) { # Empty line == post processing of entry (we've seen all its lines)
-				foreach(@array_fields) {
-					if(defined($entry{$_})) {
-						#$entry{$_} = [ split(', ', $entry{$_}) ];
-						my @a = split(', ', $entry{$_}); # split the list
-						if($_ eq 'Tag') {
-							$entry{$_} = \@a;
-						} else {
-							my @new_entries = ();
-							foreach(@a) {
-								if(index($_, '|') >= 0) {
-									push @new_entries, [ map { $self->_parse_package_str($_) } split(' \| ', $_) ];
-								} else {
-									push @new_entries, $self->_parse_package_str($_);
-								}
-							}
-							$entry{$_} = \@new_entries;
-						}
-					}
-				}
+				# Yeah, good luck understanding this mess. We loop through the array fields to split it based on ', '. Then if we're dealing with a tag but with a list that contains package names, we have to parse each package name. There's a further edge case where there's an OR statement (signified by '|') between packages that we also deal with.
+				map { $entry{$_} = $_ eq 'Tag' ? [ split(', ', $entry{$_}) ] : [ map { index($_,'|') >= 0 ? [ map { $self->_parse_package_str($_) } split(' \| ', $_) ] : $self->_parse_package_str($_) } split(', ', $entry{$_}) ] if defined($entry{$_}) } @array_fields;
 				$entries{$entry{Package}} = clone(\%entry);
 				%entry = ();
 			} else {
-				if(index($_, ' ') > 0) {
-					my ($key, $val) = split(': ', $_, 2);
-					$entry{$key} = $val if (@fields && $f{$key}) || !@fields;
-					$last_key = $key;
-				} else {
-					$entry{$last_key} .= $_ if (@fields && $f{$last_key}) || !@fields;
+				# if statement with side-effects: the defined() condition needs to be first because we need to set $last_key every time we match a line.
+				# We check in the if-condition if we are interested in this line or not by extracting the field name of this line (and only that, not the value). We only extract the value if it's a line of interest.
+				if(index($_, ' ') != 0 && (defined($f{$last_key = substr($_, 0, index($_, ':'))}) || !@fields)) {
+					$entry{$last_key} = substr($_, index($_, ':') + 2);
+				} elsif(!@fields || $f{$last_key}) {
+					$entry{$last_key} .= $_
 				}
 			}
 		}
@@ -82,11 +64,7 @@ class DPKG::Packages::Parser {
 	}
 
 	method get_package($name) {
-		if(defined($entries{$name})) {
-			return $entries{$name};
-		} else {
-			return undef;
-		}
+		return defined($entries{$name}) ? $entries{$name} : undef;
 	}
 }
 
