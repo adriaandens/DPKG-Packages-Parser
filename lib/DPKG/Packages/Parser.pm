@@ -7,7 +7,7 @@ no warnings 'experimental::class';
 use Clone qw(clone);
 use Carp qw(croak);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 class DPKG::Packages::Parser {
 	field $file :param :reader = 'Packages';
