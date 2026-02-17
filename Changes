@@ -1,6 +1,7 @@
 Revision history for DPKG-Packages-Parser
 
 {{$NEXT}}
+        - Allow passing a filehandle
 
 0.02  2026-02-13 18:38:20 GMT
         - Performance optimizations (25% faster)
