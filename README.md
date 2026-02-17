@@ -28,6 +28,10 @@ DPKG::Packages::Parser is parser for the Debian 'Packages' file. It aims to prov
 
     Creates a new DPKG::Packages::Parser object. Creating the object does not parse the file automatically. For this call the `parse()` method.
 
+- new(fh => $filehandle)
+
+    Creates a new DPKG::Packages::Parser object. Creating the object does not read the filehandle automatically. For this call the `parse()` method.
+
 - parse(\[@fields\])
 
     Reads the file from disk and parses the entire file. You can optionally pass a list of fields that you're interested in. This speeds up processing and keeps the amount of memory lower than retaining all the fields.
